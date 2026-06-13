@@ -58,15 +58,24 @@ class OverlapEngine:
 
     def concentration_flags(self, holdings: list[Holding], single_name_threshold: float, sector_threshold: float) -> dict[str, object]:
         total = sum(item.market_value for item in holdings) or 1.0
-        single_name = []
         by_account = defaultdict(lambda: defaultdict(float))
         sector_totals = defaultdict(float)
+        ticker_weight: dict[str, float] = defaultdict(float)
+        ticker_accounts: dict[str, list[str]] = defaultdict(list)
         for holding in holdings:
             weight = holding.market_value / total
-            if weight > single_name_threshold:
-                single_name.append({"ticker": holding.ticker, "weight": round(weight, 4)})
+            ticker_weight[holding.ticker] += weight
+            if holding.account_id not in ticker_accounts[holding.ticker]:
+                ticker_accounts[holding.ticker].append(holding.account_id)
             by_account[holding.account_id][holding.ticker] += holding.market_value
             sector_totals[self.metadata_for(holding.ticker).sector_focus] += weight
+        # Aggregate a single-name across ALL accounts before comparing to the threshold,
+        # and emit one flag per ticker with the per-account breakdown.
+        single_name = [
+            {"ticker": ticker, "weight": round(weight, 4), "account_ids": ticker_accounts[ticker]}
+            for ticker, weight in ticker_weight.items()
+            if weight > single_name_threshold
+        ]
         sector_flags = [{"sector": sector, "weight": round(weight, 4)} for sector, weight in sector_totals.items() if weight > sector_threshold]
         account_concentration = {}
         for account_id, positions in by_account.items():

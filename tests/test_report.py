@@ -23,4 +23,13 @@ def test_report_and_process_log(tmp_path: Path):
     assert "PORTFOLIO GRADE" in report
     assert "Analysis, not financial advice." in report
     assert all(item.rationale for item in recommendations)
-    assert all(item.tax_notes for item in recommendations if item.action in {"do_nothing_due_to_tax_cost", "tax_loss_harvest", "replace", "trim", "relocate"})
+    # Every taxable-sale path must carry a real tax estimate (or an explicit "tax impact unknown"
+    # flag), not merely a non-empty tax_notes list. A wash-sale note alone is NOT sufficient.
+    estimate_tokens = ("Estimated tax cost", "tax impact unknown")
+    for item in recommendations:
+        if item.action in {"tax_loss_harvest", "do_nothing_due_to_tax_cost"}:
+            assert any(token in note for note in item.tax_notes for token in estimate_tokens), (
+                f"{item.action} on {item.ticker} lacks a tax estimate / unknown flag: {item.tax_notes}"
+            )
+        if item.action in {"replace", "trim", "relocate"}:
+            assert item.tax_notes

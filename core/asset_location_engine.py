@@ -21,6 +21,9 @@ def evaluate_asset_location(
         meta = security_master[holding.ticker]
         preferred = location_priority(meta)
         current_type = account_types[holding.account_id]
+        if current_type not in preferred:
+            # Unknown/unsupported account type (e.g. "other") has no location opinion.
+            continue
         if preferred.index(current_type) > 0:
             suggestion = {
                 "ticker": holding.ticker,

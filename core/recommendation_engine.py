@@ -63,8 +63,8 @@ def build_recommendation(
     )
 
 
-def _holding_for(holdings: list[Holding], ticker: str, account_id: str) -> Holding:
-    return next(item for item in holdings if item.ticker == ticker and item.account_id == account_id)
+def _holding_for(holdings: list[Holding], ticker: str, account_id: str) -> Holding | None:
+    return next((item for item in holdings if item.ticker == ticker and item.account_id == account_id), None)
 
 
 def generate_recommendations(
@@ -131,46 +131,53 @@ def generate_recommendations(
     # concentration
     concentration = overlap_engine.concentration_flags(holdings, thresholds["single_name_threshold"], thresholds["sector_threshold"])
     for item in concentration["single_name_flags"]:
-        holding = next(hold for hold in holdings if hold.ticker == item["ticker"])
-        tax_check = estimate_sale_tax(lots_for_holding(lots, holding), tax_profile) if holding.account_type == "taxable" else None
-        if holding.account_type == "taxable":
-            if tax_check.blocked_by_tax_cost:
-                recommendations.append(
-                    build_recommendation(
-                        "do_nothing_due_to_tax_cost",
-                        holding.ticker,
-                        holding.account_id,
-                        None,
-                        item["weight"],
-                        None,
-                        [f"{holding.ticker} exceeds single-name concentration threshold."],
-                        ["Taxable trim is blocked by estimated tax drag; use new money elsewhere."],
-                        tax_check.tax_notes,
-                        "high",
-                        "high",
-                        "concentration-tax-block",
-                    )
-                )
+        # A single-name flag is aggregated across accounts; emit a per-account decision so the
+        # taxable tax-cost check runs against the correct (ticker, account_id) lots.
+        for account_id in item["account_ids"]:
+            holding = _holding_for(holdings, item["ticker"], account_id)
+            if holding is None:
                 continue
-            trim_tax_notes = tax_check.tax_notes
-        else:
-            trim_tax_notes = ["No tax warning in tax-advantaged account."]
-        recommendations.append(
-            build_recommendation(
-                "trim",
-                holding.ticker,
-                holding.account_id,
-                None,
-                item["weight"],
-                holding.market_value * 0.1,
-                [f"{holding.ticker} exceeds single-name concentration threshold."],
-                [],
-                trim_tax_notes,
-                "high",
-                "high",
-                f"concentration-trim-{holding.ticker}",
+            if holding.account_type == "taxable":
+                tax_check = estimate_sale_tax(lots_for_holding(lots, holding), tax_profile)
+                if tax_check.blocked_by_tax_cost:
+                    recommendations.append(
+                        build_recommendation(
+                            "do_nothing_due_to_tax_cost",
+                            holding.ticker,
+                            holding.account_id,
+                            None,
+                            item["weight"],
+                            None,
+                            [f"{holding.ticker} exceeds single-name concentration threshold."],
+                            ["Taxable trim is blocked by estimated tax drag; use new money elsewhere."],
+                            tax_check.tax_notes,
+                            "high",
+                            "high",
+                            f"concentration-tax-block-{holding.ticker}",
+                        )
+                    )
+                    continue
+                trim_tax_notes = tax_check.tax_notes
+                trim_confidence = tax_check.confidence
+            else:
+                trim_tax_notes = ["No tax warning in tax-advantaged account."]
+                trim_confidence = "high"
+            recommendations.append(
+                build_recommendation(
+                    "trim",
+                    holding.ticker,
+                    holding.account_id,
+                    None,
+                    item["weight"],
+                    holding.market_value * 0.1,
+                    [f"{holding.ticker} exceeds single-name concentration threshold."],
+                    [],
+                    trim_tax_notes,
+                    trim_confidence,
+                    "high",
+                    f"concentration-trim-{holding.ticker}",
+                )
             )
-        )
 
     # overlap redundancy
     for first, second, score in overlap_engine.redundant_pairs(holdings):
@@ -213,6 +220,11 @@ def generate_recommendations(
                     )
                 )
                 continue
+            replace_tax_notes = ["Taxable sale reviewed for overlap cleanup.", *tax_check.tax_notes]
+            replace_confidence = tax_check.confidence
+        else:
+            replace_tax_notes = ["Prefer simplifying inside tax-advantaged accounts."]
+            replace_confidence = "medium"
         recommendations.append(
             build_recommendation(
                 "replace",
@@ -223,8 +235,8 @@ def generate_recommendations(
                 holding.market_value,
                 [f"{first} and {second} are redundant same-index-family holdings.", f"Overlap score = {score:.1f}."],
                 [],
-                ["Prefer simplifying inside tax-advantaged accounts." if holding.account_type != "taxable" else "Taxable sale reviewed for overlap cleanup."],
-                "medium",
+                replace_tax_notes,
+                replace_confidence,
                 "medium",
                 f"redundant-replace-{second}",
                 replacement_ticker=first,
@@ -264,6 +276,11 @@ def generate_recommendations(
                     )
                 )
                 continue
+            replace_tax_notes = ["Tax-aware replacement reviewed.", *tax_check.tax_notes]
+            replace_confidence = tax_check.confidence
+        else:
+            replace_tax_notes = ["Tax-aware replacement reviewed."]
+            replace_confidence = "medium"
         if not menu_allows(menu_map, holding.account_id, replacement):
             recommendations.append(
                 build_recommendation(
@@ -292,8 +309,8 @@ def generate_recommendations(
                 holding.market_value,
                 [f"{holding.ticker} has elevated fee drag.", f"Replacement candidate {replacement} offers similar exposure."],
                 ["Replacement requires similar exposure and adequate liquidity."],
-                ["Tax-aware replacement reviewed."],
-                "medium",
+                replace_tax_notes,
+                replace_confidence,
                 "medium",
                 f"fee-replace-{holding.ticker}",
                 replacement_ticker=replacement,
@@ -374,6 +391,7 @@ def generate_recommendations(
                 )
             )
             continue
+        tax_check = estimate_sale_tax(holding_lots, tax_profile)
         replacement = wash.safe_replacements[0] if wash.safe_replacements else None
         if replacement and not menu_allows(menu_map, holding.account_id, replacement):
             recommendations.append(
@@ -403,8 +421,8 @@ def generate_recommendations(
                 holding.market_value,
                 ["Realized loss available and wash-sale screen passed."],
                 [],
-                wash.notes,
-                "high",
+                [*tax_check.tax_notes, *wash.notes],
+                tax_check.confidence,
                 "high",
                 f"tax-loss-harvest-{holding.ticker}",
                 replacement_ticker=replacement,
