@@ -1,0 +1,5 @@
+single_name_threshold: 0.15
+sector_threshold: 0.35
+drift_threshold: 0.05
+high_fee_threshold: 0.0040
+harvest_loss_threshold: -500.0

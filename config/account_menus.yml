@@ -1,0 +1,11 @@
+TAX-1:
+  universe: open
+IRA-1:
+  universe: menu
+  allowed_instruments: [BND, VXUS, VEA, VTI, VTV, AVUV, AGG]
+ROTH-1:
+  universe: menu
+  allowed_instruments: [VTI, VXUS, AVUV, AGG, BND, ITOT]
+HSA-1:
+  universe: menu
+  allowed_instruments: [VTI, VXUS, AGG, BND, SCHB]

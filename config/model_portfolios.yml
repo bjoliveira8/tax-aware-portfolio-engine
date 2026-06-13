@@ -1,0 +1,15 @@
+conservative:
+  us_equity: 0.35
+  international_equity: 0.15
+  taxable_bond: 0.45
+  cash: 0.05
+balanced:
+  us_equity: 0.50
+  international_equity: 0.20
+  taxable_bond: 0.25
+  cash: 0.05
+aggressive:
+  us_equity: 0.65
+  international_equity: 0.25
+  taxable_bond: 0.08
+  cash: 0.02
