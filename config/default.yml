@@ -1,36 +1,6 @@
+# Override layer. The canonical data lives in the standalone config files
+# (thresholds.yml, model_portfolios.yml, tax_assumptions.yml, account_menus.yml), which are
+# loaded first; values set here override them, and --config / CLI flags override these in turn.
 defaults:
   as_of_date: "2026-06-01"
   target_profile: balanced
-
-tax_profile:
-  filing_status: married_filing_jointly
-  federal_marginal_rate: 0.32
-  ltcg_rate: 0.15
-  niit_applies: false
-  state_rate: 0.05
-  qualified_dividend_rate: 0.15
-  confirm_with_cpa_above: 5000.0
-
-thresholds:
-  single_name_threshold: 0.15
-  sector_threshold: 0.35
-  drift_threshold: 0.05
-  high_fee_threshold: 0.0040
-  harvest_loss_threshold: -500.0
-
-model_portfolios:
-  conservative:
-    us_equity: 0.35
-    international_equity: 0.15
-    taxable_bond: 0.45
-    cash: 0.05
-  balanced:
-    us_equity: 0.50
-    international_equity: 0.20
-    taxable_bond: 0.25
-    cash: 0.05
-  aggressive:
-    us_equity: 0.65
-    international_equity: 0.25
-    taxable_bond: 0.08
-    cash: 0.02

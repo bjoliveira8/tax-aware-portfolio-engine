@@ -156,7 +156,11 @@ def generate_recommendations(
                 None,
                 None,
                 None,
-                [suggestion["reason"], "Use tax-advantaged trades or redirect contributions instead of forcing taxable sale."],
+                [
+                    suggestion["reason"],
+                    "Use tax-advantaged trades or redirect contributions instead of forcing taxable sale.",
+                    "Confirm the destination account's menu permits this instrument before executing.",
+                ],
                 [],
                 [suggestion.get("note", "Forward-looking location improvement only.")],
                 "high",
@@ -355,6 +359,9 @@ def generate_recommendations(
         )
 
     # drift
+    # Drift recs name an asset class (not a concrete instrument) and carry account_id=None, so
+    # account-menu validation is not applicable here by construction. Revisit if drift is ever
+    # mapped to a concrete instrument + destination account (see improvement plan M6 / Wave 5).
     for asset_class, info in drift.items():
         diff = info["difference"]
         if abs(diff) < thresholds["drift_threshold"]:

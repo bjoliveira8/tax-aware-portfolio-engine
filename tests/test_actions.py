@@ -34,3 +34,16 @@ def test_action_engine_behaviors():
         if item.account_id is not None and item.action != "hold"
     )
     assert all(count == 1 for count in directional.values())
+
+
+def test_relocate_respects_menu():
+    # A relocate names a destination account TYPE (not a concrete instrument), so it must disclose
+    # that the destination account's menu has to be confirmed at execution -- never silently
+    # implying a buy of an instrument an account may not hold.
+    result = CsvDataProvider().load(ROOT / "data/mock_holdings.csv", ROOT / "data/mock_tax_lots.csv", ROOT / "data/mock_account_menus.csv")
+    master = load_security_master_csv(ROOT / "data/security_master.csv")
+    analysis = generate_recommendations(result.holdings, result.tax_lots, result.account_menus, master, THRESHOLDS, TAX_PROFILE, TARGET, date(2026, 6, 1))
+    relocates = [item for item in analysis["recommendations"] if item.action == "relocate"]
+    assert relocates  # BND relocate exists on mock data
+    for item in relocates:
+        assert any("menu" in note.lower() for note in item.rationale)

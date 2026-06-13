@@ -1,8 +1,10 @@
+# Mirrors data/mock_account_menus.csv, which is the authoritative runtime menu source for the
+# analyze command on mock data. Keep these two in sync.
 TAX-1:
   universe: open
 IRA-1:
   universe: menu
-  allowed_instruments: [BND, VXUS, VEA, VTI, VTV, AVUV, AGG]
+  allowed_instruments: [FXNAX]
 ROTH-1:
   universe: menu
   allowed_instruments: [VTI, VXUS, AVUV, AGG, BND, ITOT]

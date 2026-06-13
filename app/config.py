@@ -27,14 +27,29 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
     return merged
 
 
+# Standalone config files are the canonical source of truth for each namespace. default.yml is
+# layered on top as the override file, so editing any standalone file changes engine behavior.
+STANDALONE_FILES = {
+    "thresholds.yml": "thresholds",
+    "model_portfolios.yml": "model_portfolios",
+    "tax_assumptions.yml": "tax_profile",
+    "account_menus.yml": "account_menus",
+}
+
+
 def load_config(
     config_dir: str | Path = "config",
     config_file: str | Path | None = None,
     cli_overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Build the merged config with precedence: standalone files < default.yml < --config file < CLI flags."""
     config_dir = Path(config_dir)
-    defaults = load_yaml(config_dir / "default.yml")
-    merged = defaults
+    merged: dict[str, Any] = {}
+    for filename, namespace in STANDALONE_FILES.items():
+        data = load_yaml(config_dir / filename)
+        if data:
+            merged[namespace] = data
+    merged = deep_merge(merged, load_yaml(config_dir / "default.yml"))
     if config_file:
         merged = deep_merge(merged, load_yaml(config_file))
     if cli_overrides:
