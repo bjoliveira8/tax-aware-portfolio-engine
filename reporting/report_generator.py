@@ -47,7 +47,7 @@ def render_report(
     overlap_count = len(concentration["single_name_flags"])
     tax_drag_flags = sum(1 for item in recommendations if item.action == "do_nothing_due_to_tax_cost")
     grade = compute_grade(drift_report, concentration, fee_drag_bps, tax_drag_flags, overlap_count)
-    if len(recommendations) == 1 and recommendations[0].rationale == ["No action is justified."]:
+    if len(recommendations) == 1 and recommendations[0].thesis_key == "no-action":
         bottom_line = [
             "No action is justified.",
             "Drift is within tolerance, concentration is acceptable, and tax cost outweighs benefit.",

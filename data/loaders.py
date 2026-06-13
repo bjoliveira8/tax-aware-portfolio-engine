@@ -144,6 +144,15 @@ class CsvDataProvider:
         return IngestionResult(holdings=holdings, tax_lots=lots, account_menus=menus, warnings=holding_warnings + lot_warnings)
 
 
+def blended_fee_drag_bps(holdings: list[Holding]) -> float:
+    """Asset-weighted expense ratio in basis points, computed only over holdings that report an
+    expense ratio. Holdings with a missing expense ratio are excluded (not counted as 0%), so a
+    cash sleeve does not silently dilute the blended fee number."""
+    priced = [holding for holding in holdings if holding.expense_ratio is not None]
+    priced_value = sum(holding.market_value for holding in priced) or 1.0
+    return round(sum(holding.expense_ratio * holding.market_value for holding in priced) / priced_value * 10000, 2)
+
+
 def portfolio_summary(holdings: list[Holding]) -> dict[str, object]:
     total = sum(item.market_value for item in holdings)
     accounts = defaultdict(float)

@@ -28,10 +28,11 @@ def estimate_sale_tax(lots: list[TaxLot], tax_profile: TaxProfile) -> TaxTradeAn
         if lot.unrealized_gain > 0:
             rate = tax_profile.ltcg_rate if lot.is_long_term else tax_profile.federal_marginal_rate
             if tax_profile.niit_applies:
-                rate += 0.038
+                rate += tax_profile.niit_rate
             rate += tax_profile.state_rate
             tax_cost += lot.unrealized_gain * rate
-            if not lot.is_long_term and lot.unrealized_gain > tax_profile.confirm_with_cpa_above / 4:
+            short_term_block = tax_profile.confirm_with_cpa_above * tax_profile.short_term_gain_block_fraction
+            if not lot.is_long_term and lot.unrealized_gain > short_term_block:
                 blocked = True
                 tax_notes.append("Large short-term gain suppresses taxable sale.")
     if tax_cost > tax_profile.confirm_with_cpa_above:

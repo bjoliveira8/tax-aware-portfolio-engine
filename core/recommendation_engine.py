@@ -116,6 +116,25 @@ def generate_recommendations(
 ) -> dict[str, object]:
     overlap_engine = OverlapEngine(security_master)
     wash_guard = WashSaleGuard(security_master)
+    # Defensive: a holding whose ticker is missing from the security master cannot be analysed.
+    # Skip it (with a surfaced warning) rather than crashing the whole pipeline on a KeyError.
+    unknown_securities = sorted({holding.ticker for holding in holdings if holding.ticker not in security_master})
+    holdings = [holding for holding in holdings if holding.ticker in security_master]
+    if not holdings:
+        return {
+            "recommendations": [
+                build_recommendation(
+                    "hold", "portfolio", None, None, None, None,
+                    ["No action is justified."], [], ["No analyzable holdings."],
+                    "high", "low", "no-action",
+                )
+            ],
+            "current_allocation": {},
+            "target_allocation": target_allocation(model_portfolio),
+            "drift_report": {},
+            "concentration": {"single_name_flags": [], "sector_flags": [], "account_concentration": {}},
+            "unknown_securities": unknown_securities,
+        }
     total = sum(item.market_value for item in holdings) or 1.0
     account_types = {holding.account_id: holding.account_type for holding in holdings}
     menu_map = {menu.account_id: menu for menu in menus}
@@ -144,7 +163,7 @@ def generate_recommendations(
                         tax_check.tax_notes,
                         "high",
                         "medium",
-                        "tax-cost-block-location",
+                        f"tax-cost-block-location-{suggestion['ticker']}",
                     )
                 )
                 continue
@@ -525,4 +544,5 @@ def generate_recommendations(
         "target_allocation": target,
         "drift_report": drift,
         "concentration": concentration,
+        "unknown_securities": unknown_securities,
     }

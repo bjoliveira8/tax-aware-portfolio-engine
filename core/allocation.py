@@ -1,17 +1,26 @@
 from __future__ import annotations
 
+import warnings
 from collections import defaultdict
 
 from data.schemas import Holding, SecurityMetadata
 
 
 def _normalized_rounded(values: dict[str, float]) -> dict[str, float]:
-    rounded = {key: round(value, 6) for key, value in values.items()}
-    if not rounded:
-        return rounded
-    keys = list(rounded)
-    rounded[keys[-1]] = round(1.0 - sum(rounded[key] for key in keys[:-1]), 6)
-    return rounded
+    """Normalize proportionally so the weights genuinely sum to 1.
+
+    Earlier code forced the last key to absorb all rounding error, which masked invalid inputs and
+    made "sums to 1" tautological. Here we divide by the true total; if the raw input deviates from
+    1.0 beyond a small epsilon we surface a warning rather than silently hiding it.
+    """
+    if not values:
+        return {}
+    raw_total = sum(values.values())
+    if raw_total <= 0:
+        return {key: 0.0 for key in values}
+    if abs(raw_total - 1.0) > 1e-6:
+        warnings.warn(f"Allocation weights summed to {raw_total:.6f}; normalizing proportionally.", stacklevel=2)
+    return {key: round(value / raw_total, 6) for key, value in values.items()}
 
 
 def current_allocation(holdings: list[Holding], security_master: dict[str, SecurityMetadata]) -> dict[str, float]:

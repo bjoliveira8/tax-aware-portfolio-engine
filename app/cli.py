@@ -5,7 +5,7 @@ from datetime import date
 
 from app.config import load_config
 from core.recommendation_engine import generate_recommendations
-from data.loaders import CsvDataProvider, load_security_master_csv, portfolio_summary
+from data.loaders import CsvDataProvider, blended_fee_drag_bps, load_security_master_csv, portfolio_summary
 from data.schemas import TaxProfile
 from reporting.process_log import build_process_log
 from reporting.report_generator import render_report
@@ -51,12 +51,10 @@ def run_analyze(args: argparse.Namespace) -> str:
         date.fromisoformat(config["defaults"]["as_of_date"]),
     )
     recommendations = analysis["recommendations"]
-    fee_drag_bps = round(
-        sum((holding.expense_ratio or 0.0) * holding.market_value for holding in ingestion.holdings)
-        / (summary["total_market_value"] or 1.0)
-        * 10000,
-        2,
-    )
+    fee_drag_bps = blended_fee_drag_bps(ingestion.holdings)
+    warnings = list(ingestion.warnings)
+    if analysis.get("unknown_securities"):
+        warnings.append(f"Unknown securities skipped (not in security master): {analysis['unknown_securities']}")
     process_log = build_process_log(
         recommendations,
         fee_drag_bps,
@@ -68,7 +66,7 @@ def run_analyze(args: argparse.Namespace) -> str:
     report_text = render_report(analysis, recommendations, process_log, fee_drag_bps, args.output)
     print(f"Total value: ${summary['total_market_value']:,.2f}")
     print(f"Accounts detected: {', '.join(summary['accounts_detected'])}")
-    print(f"Warnings: {ingestion.warnings}")
+    print(f"Warnings: {warnings}")
     print(f"Report written: {args.output}")
     return report_text
 

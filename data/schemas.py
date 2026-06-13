@@ -44,6 +44,9 @@ class TaxProfile:
     state_rate: float
     qualified_dividend_rate: float
     confirm_with_cpa_above: float
+    niit_rate: float = 0.038
+    # A short-term gain above confirm_with_cpa_above * this fraction suppresses a taxable sale.
+    short_term_gain_block_fraction: float = 0.25
 
 
 @dataclass(slots=True)

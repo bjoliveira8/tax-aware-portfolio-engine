@@ -30,6 +30,9 @@ def test_cli_end_to_end(tmp_path: Path):
         check=True,
     )
     assert "Total value:" in result.stdout
+    assert "Accounts detected:" in result.stdout
+    assert all(acct in result.stdout for acct in ("TAX-1", "IRA-1", "ROTH-1", "HSA-1"))
+    assert "Warnings:" in result.stdout
     assert output.exists()
     report = output.read_text(encoding="utf-8")
     assert "BOTTOM LINE" in report
