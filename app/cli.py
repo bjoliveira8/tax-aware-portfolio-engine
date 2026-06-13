@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from datetime import date
 
-from app.config import load_config
+from app.config import ConfigValidationError, load_config
 from core.recommendation_engine import generate_recommendations
-from data.loaders import CsvDataProvider, load_security_master_csv, portfolio_summary
+from data.loaders import CsvDataProvider, InputValidationError, load_security_master_csv, portfolio_summary, validate_ingestion
 from data.schemas import TaxProfile
 from reporting.process_log import build_process_log
 from reporting.report_generator import render_report
+
+
+class CliRunError(ValueError):
+    pass
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,8 +42,11 @@ def run_analyze(args: argparse.Namespace) -> str:
     provider = CsvDataProvider(as_of_date=date.fromisoformat(config["defaults"]["as_of_date"]))
     ingestion = provider.load(args.holdings, args.lots, args.account_menus)
     security_master = load_security_master_csv(args.security_master)
+    validate_ingestion(ingestion, security_master)
     summary = portfolio_summary(ingestion.holdings)
     target_name = args.target_profile or config["defaults"]["target_profile"]
+    if target_name not in config["model_portfolios"]:
+        raise CliRunError(f"Unknown target profile: {target_name}")
     target = config["model_portfolios"][target_name]
     analysis = generate_recommendations(
         ingestion.holdings,
@@ -59,10 +67,8 @@ def run_analyze(args: argparse.Namespace) -> str:
     )
     process_log = build_process_log(
         recommendations,
+        analysis,
         fee_drag_bps,
-        not analysis["concentration"]["single_name_flags"],
-        True,
-        not analysis["concentration"]["single_name_flags"],
         config["defaults"]["as_of_date"],
     )
     report_text = render_report(analysis, recommendations, process_log, fee_drag_bps, args.output)
@@ -76,10 +82,14 @@ def run_analyze(args: argparse.Namespace) -> str:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    if args.command == "analyze":
-        run_analyze(args)
-    else:
-        parser.print_help()
+    try:
+        if args.command == "analyze":
+            run_analyze(args)
+        else:
+            parser.print_help()
+    except (CliRunError, ConfigValidationError, InputValidationError, FileNotFoundError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":

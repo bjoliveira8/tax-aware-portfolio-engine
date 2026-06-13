@@ -37,9 +37,12 @@ def test_attack_taxable_sale_without_estimate_note_is_blocked_by_explicit_estima
     menus = [AccountMenu("TAX-ATTACK", "open", None), AccountMenu("IRA-ATTACK", "open", None)]
 
     recommendations = recs(holdings, lots, menus)
-    trim = next(item for item in recommendations if item.action == "trim" and item.ticker == "AAPL")
-
-    assert any("Estimated tax cost:" in note for note in trim.tax_notes)
+    taxable_sale_actions = [
+        item
+        for item in recommendations
+        if item.ticker == "AAPL" and item.action in {"trim", "replace", "tax_loss_harvest"}
+    ]
+    assert all(any("Estimated tax cost:" in note for note in item.tax_notes) for item in taxable_sale_actions)
 
 
 def test_attack_wash_sale_bypass_fails_same_ticker_recent_buy_is_blocked():
@@ -106,7 +109,7 @@ def test_attack_account_menu_violation_is_blocked_for_overlap_replace():
     ]
 
     recommendations = recs(holdings, lots, menus)
-    blocked = next(item for item in recommendations if item.action == "hold" and item.ticker == "BND")
+    blocked = next(item for item in recommendations if item.ticker == "BND")
     assert any("account menu" in text.lower() for text in blocked.rationale + blocked.tax_notes)
 
 

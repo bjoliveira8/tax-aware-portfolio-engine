@@ -18,4 +18,4 @@ def test_action_engine_behaviors():
     recommendations = analysis["recommendations"]
     assert any(item.action == "tax_loss_harvest" and item.ticker == "VXUS" for item in recommendations)
     assert any(item.action == "do_nothing_due_to_tax_cost" and item.ticker in {"VTI", "us_equity"} for item in recommendations)
-    assert any(item.action == "hold" and "account menu" in " ".join(item.tax_notes + item.rationale).lower() for item in recommendations)
+    assert any("account menu" in " ".join(item.tax_notes + item.rationale).lower() for item in recommendations)

@@ -1,26 +1,98 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import cast
 
 from core.allocation import current_allocation, drift_report, target_allocation
 from core.asset_location_engine import evaluate_asset_location
-from core.etf_replacement import rank_replacements
+from core.etf_replacement import is_compatible_replacement, rank_replacements
 from core.overlap_engine import OverlapEngine
 from core.tax_lot_engine import estimate_sale_tax, lots_for_holding
 from core.wash_sale_guard import WashSaleGuard
-from data.schemas import AccountMenu, Holding, Recommendation, SecurityMetadata, TaxLot, TaxProfile
+from data.schemas import ActionType, AccountMenu, Holding, Recommendation, SecurityMetadata, TaxLot, TaxProfile
 
 PRIORITY_RANK = {
     "relocate": 0,
-    "trim": 1,
-    "tax_loss_harvest": 2,
-    "replace": 3,
-    "rebalance": 4,
-    "add": 5,
-    "do_nothing_due_to_tax_cost": 6,
-    "hold": 7,
+    "redirect_contributions": 1,
+    "trim": 2,
+    "tax_loss_harvest": 3,
+    "replace": 4,
+    "rebalance": 5,
+    "add": 6,
+    "do_nothing_due_to_tax_cost": 7,
+    "hold": 8,
 }
 URGENCY_RANK = {"high": 0, "medium": 1, "low": 2}
+EXECUTABLE_ACTIONS = {"trim", "replace", "relocate", "rebalance", "add", "tax_loss_harvest"}
+BLOCKED_ACTIONS = {"do_nothing_due_to_tax_cost"}
+ADVISORY_ACTIONS = {"hold", "redirect_contributions"}
+
+
+def _merge_text(existing: list[str], incoming: list[str]) -> list[str]:
+    merged: list[str] = []
+    for item in [*existing, *incoming]:
+        if item and item not in merged:
+            merged.append(item)
+    return merged
+
+
+def _action_class(action: str) -> str:
+    if action in EXECUTABLE_ACTIONS:
+        return "executable"
+    if action in BLOCKED_ACTIONS:
+        return "blocked"
+    return "advisory"
+
+
+def reconcile_recommendations(recommendations: list[Recommendation]) -> list[Recommendation]:
+    reconciled: dict[tuple[str | None, str], Recommendation] = {}
+    for rec in recommendations:
+        key = (rec.account_id, rec.ticker)
+        current = reconciled.get(key)
+        if current is None:
+            reconciled[key] = rec
+            continue
+        current_class = _action_class(current.action)
+        new_class = _action_class(rec.action)
+        current_rank = PRIORITY_RANK.get(current.action, 99)
+        new_rank = PRIORITY_RANK.get(rec.action, 99)
+        if current.action == rec.action:
+            current.rationale = _merge_text(current.rationale, rec.rationale)
+            current.risks = _merge_text(current.risks, rec.risks)
+            current.tax_notes = _merge_text(current.tax_notes, rec.tax_notes)
+            continue
+        if current_class == "executable":
+            if new_class == "executable" and new_rank < current_rank:
+                rec.rationale = _merge_text(rec.rationale, current.rationale)
+                rec.risks = _merge_text(rec.risks, current.risks)
+                rec.tax_notes = _merge_text(rec.tax_notes, current.tax_notes)
+                reconciled[key] = rec
+            elif new_class != "executable":
+                current.rationale = _merge_text(current.rationale, rec.rationale)
+                current.risks = _merge_text(current.risks, rec.risks)
+                current.tax_notes = _merge_text(current.tax_notes, rec.tax_notes)
+            continue
+        if new_class == "executable":
+            rec.rationale = _merge_text(rec.rationale, current.rationale)
+            rec.risks = _merge_text(rec.risks, current.risks)
+            rec.tax_notes = _merge_text(rec.tax_notes, current.tax_notes)
+            reconciled[key] = rec
+            continue
+        if current_class == "blocked" and new_class == "advisory":
+            current.rationale = _merge_text(current.rationale, rec.rationale)
+            current.risks = _merge_text(current.risks, rec.risks)
+            current.tax_notes = _merge_text(current.tax_notes, rec.tax_notes)
+            continue
+        if current_class == "advisory" and new_class == "blocked":
+            rec.rationale = _merge_text(rec.rationale, current.rationale)
+            rec.risks = _merge_text(rec.risks, current.risks)
+            rec.tax_notes = _merge_text(rec.tax_notes, current.tax_notes)
+            reconciled[key] = rec
+            continue
+        current.rationale = _merge_text(current.rationale, rec.rationale)
+        current.risks = _merge_text(current.risks, rec.risks)
+        current.tax_notes = _merge_text(current.tax_notes, rec.tax_notes)
+    return list(reconciled.values())
 
 
 def menu_allows(menu_map: dict[str, AccountMenu], account_id: str, ticker: str) -> bool:
@@ -47,7 +119,7 @@ def build_recommendation(
 ) -> Recommendation:
     return Recommendation(
         recommendation_id=Recommendation.build_id(action, ticker, account_id, thesis_key),
-        action=action,
+        action=cast(ActionType, action),
         ticker=ticker,
         account_id=account_id,
         target_weight=target_weight,
@@ -77,6 +149,29 @@ def generate_recommendations(
     model_portfolio: dict[str, float],
     as_of_date: date,
 ) -> dict[str, object]:
+    if not holdings:
+        empty_recommendation = build_recommendation(
+            "hold",
+            "portfolio",
+            None,
+            None,
+            None,
+            None,
+            ["No holdings loaded; analysis aborted."],
+            [],
+            ["Load holdings before requesting portfolio actions."],
+            "high",
+            "low",
+            "no-holdings",
+        )
+        return {
+            "recommendations": [empty_recommendation],
+            "current_allocation": {},
+            "target_allocation": target_allocation(model_portfolio),
+            "drift_report": {},
+            "concentration": {"single_name_flags": [], "sector_flags": [], "account_concentration": {}},
+        }
+
     overlap_engine = OverlapEngine(security_master)
     wash_guard = WashSaleGuard(security_master)
     total = sum(item.market_value for item in holdings) or 1.0
@@ -113,7 +208,7 @@ def generate_recommendations(
                 continue
         recommendations.append(
             build_recommendation(
-                "relocate",
+                suggestion["action"],
                 suggestion["ticker"],
                 suggestion["account_id"],
                 None,
@@ -354,7 +449,11 @@ def generate_recommendations(
         loss_lots = [lot for lot in holding_lots if lot.unrealized_gain is not None and lot.unrealized_gain < thresholds["harvest_loss_threshold"]]
         if not loss_lots:
             continue
-        replacements = [ticker for ticker, candidate in security_master.items() if candidate.asset_class == meta.asset_class and ticker != holding.ticker]
+        replacements = [
+            ticker
+            for ticker, candidate in security_master.items()
+            if is_compatible_replacement(meta, candidate)
+        ]
         wash = wash_guard.check_harvest(holding.ticker, as_of_date, lots, replacements)
         if wash.status != "wash_sale_clean":
             recommendations.append(
@@ -413,7 +512,7 @@ def generate_recommendations(
 
     unique = {rec.recommendation_id: rec for rec in recommendations}
     ordered = sorted(
-        unique.values(),
+        reconcile_recommendations(list(unique.values())),
         key=lambda rec: (PRIORITY_RANK.get(rec.action, 99), URGENCY_RANK.get(rec.urgency, 9), rec.recommendation_id),
     )
     if not ordered:

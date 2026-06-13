@@ -16,14 +16,14 @@ class TaxTradeAnalysis:
 
 def estimate_sale_tax(lots: list[TaxLot], tax_profile: TaxProfile) -> TaxTradeAnalysis:
     if not lots:
-        return TaxTradeAnalysis(None, None, False, ["No lot data available; tax impact unknown"], "low")
+        return TaxTradeAnalysis(None, None, True, ["No lot data available; tax impact unknown"], "low")
     estimated_gain = 0.0
     tax_cost = 0.0
     tax_notes: list[str] = []
     blocked = False
     for lot in lots:
         if lot.cost_basis_per_share is None or lot.unrealized_gain is None:
-            return TaxTradeAnalysis(None, None, False, ["tax impact unknown"], "low")
+            return TaxTradeAnalysis(None, None, True, ["tax impact unknown"], "low")
         estimated_gain += lot.unrealized_gain
         if lot.unrealized_gain > 0:
             rate = tax_profile.ltcg_rate if lot.is_long_term else tax_profile.federal_marginal_rate

@@ -6,7 +6,7 @@ from hashlib import sha256
 from typing import Literal
 
 AccountType = Literal["taxable", "traditional_401k", "roth_401k", "traditional_ira", "roth_ira", "hsa", "other"]
-ActionType = Literal["hold", "add", "trim", "exit", "replace", "relocate", "rebalance", "tax_loss_harvest", "do_nothing_due_to_tax_cost"]
+ActionType = Literal["hold", "add", "trim", "exit", "replace", "relocate", "redirect_contributions", "rebalance", "tax_loss_harvest", "do_nothing_due_to_tax_cost"]
 UniverseType = Literal["open", "menu"]
 
 
@@ -33,6 +33,7 @@ class TaxLot:
     holding_period_days: int
     is_long_term: bool
     unrealized_gain: float | None = None
+    account_type: AccountType = "other"
 
 
 @dataclass(slots=True)
