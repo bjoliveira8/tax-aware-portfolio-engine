@@ -18,4 +18,19 @@ def test_action_engine_behaviors():
     recommendations = analysis["recommendations"]
     assert any(item.action == "tax_loss_harvest" and item.ticker == "VXUS" for item in recommendations)
     assert any(item.action == "do_nothing_due_to_tax_cost" and item.ticker in {"VTI", "us_equity"} for item in recommendations)
-    assert any(item.action == "hold" and "account menu" in " ".join(item.tax_notes + item.rationale).lower() for item in recommendations)
+    # Account-menu constraint: no surviving recommendation may name a replacement instrument the
+    # destination account cannot hold (after reconciliation a menu-block may be superseded by a
+    # higher-priority directional action, but a forbidden instrument must never be recommended).
+    menu_map = {menu.account_id: menu for menu in result.account_menus}
+    for item in recommendations:
+        menu = menu_map.get(item.account_id)
+        if item.replacement_ticker and menu and menu.universe == "menu":
+            assert item.replacement_ticker in (menu.allowed_instruments or [])
+    # Reconciliation: at most one directional action per concrete (ticker, account_id) position.
+    from collections import Counter
+    directional = Counter(
+        (item.ticker, item.account_id)
+        for item in recommendations
+        if item.account_id is not None and item.action != "hold"
+    )
+    assert all(count == 1 for count in directional.values())

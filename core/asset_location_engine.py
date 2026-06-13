@@ -19,6 +19,9 @@ def evaluate_asset_location(
     suggestions = []
     for holding in holdings:
         meta = security_master[holding.ticker]
+        if meta.asset_class == "cash":
+            # Cash has no asset-location thesis; never recommend relocating it.
+            continue
         preferred = location_priority(meta)
         current_type = account_types[holding.account_id]
         if current_type not in preferred:

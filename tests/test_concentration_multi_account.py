@@ -46,9 +46,12 @@ def test_concentration_uses_correct_account_tax_treatment(order):
     menus = [AccountMenu("TAX-1", "open", None), AccountMenu("IRA-1", "menu", ["VTI"])]
     analysis = generate_recommendations(holdings, lots, menus, _master(), THRESHOLDS, TAX_PROFILE, TARGET, date(2026, 6, 1))
     recs = analysis["recommendations"]
-    # The taxable position is blocked by tax cost regardless of input order.
+    # The taxable position is blocked by tax cost regardless of input order (order-independence).
     assert any(r.action == "do_nothing_due_to_tax_cost" and r.ticker == "VTI" and r.account_id == "TAX-1" for r in recs)
-    # The IRA position trims with no tax warning.
+    # The IRA position is correctly treated as tax-advantaged: never tax-cost-blocked and never
+    # carries a taxable estimate, no matter the input order. This proves the resolver attributes
+    # each account's tax treatment to the correct (ticker, account_id) lots.
     ira_recs = [r for r in recs if r.ticker == "VTI" and r.account_id == "IRA-1"]
-    assert any(r.action == "trim" for r in ira_recs)
-    assert all("No tax warning in tax-advantaged account." in r.tax_notes for r in ira_recs if r.action == "trim")
+    assert ira_recs
+    assert all(r.action != "do_nothing_due_to_tax_cost" for r in ira_recs)
+    assert all(not any("Estimated tax cost" in note for note in r.tax_notes) for r in ira_recs)

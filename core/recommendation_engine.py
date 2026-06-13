@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import date
 
 from core.allocation import current_allocation, drift_report, target_allocation
@@ -65,6 +66,42 @@ def build_recommendation(
 
 def _holding_for(holdings: list[Holding], ticker: str, account_id: str) -> Holding | None:
     return next((item for item in holdings if item.ticker == ticker and item.account_id == account_id), None)
+
+
+def reconcile_recommendations(recommendations: list[Recommendation]) -> list[Recommendation]:
+    """Collapse contradictory stage outputs to one coherent action per (ticker, account_id).
+
+    Each analysis stage appends independently, so a single position can accrue several conflicting
+    recommendations (e.g. relocate + trim + harvest, or trim + a menu-block hold). This pass keeps
+    the single highest-priority action per concrete position, using the same ordering the final sort
+    applies (PRIORITY_RANK -> URGENCY_RANK -> recommendation_id). Every superseded *different* action
+    is disclosed in the survivor's rationale -- never silently hidden. Portfolio-level recommendations
+    (account_id is None, e.g. drift) are never merged and pass through unchanged.
+    """
+    groups: dict[tuple[str, str], list[Recommendation]] = defaultdict(list)
+    passthrough: list[Recommendation] = []
+    for rec in recommendations:
+        if rec.account_id is None:
+            passthrough.append(rec)
+        else:
+            groups[(rec.ticker, rec.account_id)].append(rec)
+    reconciled = list(passthrough)
+    for group in groups.values():
+        ranked = sorted(
+            group,
+            key=lambda rec: (PRIORITY_RANK.get(rec.action, 99), URGENCY_RANK.get(rec.urgency, 9), rec.recommendation_id),
+        )
+        survivor = ranked[0]
+        seen_actions: set[str] = set()
+        notes: list[str] = []
+        for dropped in ranked[1:]:
+            if dropped.action != survivor.action and dropped.action not in seen_actions:
+                seen_actions.add(dropped.action)
+                notes.append(f"Supersedes a lower-priority {dropped.action} on this position.")
+        if notes:
+            survivor.rationale = [*survivor.rationale, *notes]
+        reconciled.append(survivor)
+    return reconciled
 
 
 def generate_recommendations(
@@ -392,8 +429,31 @@ def generate_recommendations(
             )
             continue
         tax_check = estimate_sale_tax(holding_lots, tax_profile)
-        replacement = wash.safe_replacements[0] if wash.safe_replacements else None
-        if replacement and not menu_allows(menu_map, holding.account_id, replacement):
+        # Rank the wash-safe candidates by exposure similarity, fee and liquidity rather than
+        # picking an arbitrary first survivor; require similar exposure (overlap >= 0.4) and
+        # adequate liquidity, matching the fee-replacement gate.
+        ranked = rank_replacements(holding.ticker, wash.safe_replacements, security_master, overlap_engine)
+        ranked = [candidate for candidate in ranked if candidate["liquidity_ok"] and candidate["overlap"] >= 0.4]
+        replacement = str(ranked[0]["ticker"]) if ranked else None
+        if replacement is None:
+            recommendations.append(
+                build_recommendation(
+                    "hold",
+                    holding.ticker,
+                    holding.account_id,
+                    None,
+                    None,
+                    None,
+                    ["Loss exists but no wash-safe replacement with similar exposure and adequate liquidity is available."],
+                    [],
+                    [*tax_check.tax_notes, *wash.notes],
+                    "medium",
+                    "low",
+                    f"harvest-no-replacement-{holding.ticker}",
+                )
+            )
+            continue
+        if not menu_allows(menu_map, holding.account_id, replacement):
             recommendations.append(
                 build_recommendation(
                     "hold",
@@ -429,6 +489,7 @@ def generate_recommendations(
             )
         )
 
+    recommendations = reconcile_recommendations(recommendations)
     unique = {rec.recommendation_id: rec for rec in recommendations}
     ordered = sorted(
         unique.values(),

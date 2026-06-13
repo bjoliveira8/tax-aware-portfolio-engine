@@ -26,20 +26,26 @@ def recs(holdings: list[Holding], lots: list[TaxLot], menus: list[AccountMenu]) 
 
 
 def test_attack_taxable_sale_without_estimate_note_is_blocked_by_explicit_estimate():
+    # VTI is broad-market equity that belongs in taxable, so it is not relocated away; a
+    # concentration trim survives as a genuine taxable sale and must carry a tax estimate.
     holdings = [
-        Holding("TAX-ATTACK", "Taxable", "taxable", "AAPL", "stock", 100, 20000, None, 0.005),
+        Holding("TAX-ATTACK", "Taxable", "taxable", "VTI", "etf", 100, 20000, 0.0003, 0.013),
         Holding("IRA-ATTACK", "IRA", "traditional_ira", "BND", "etf", 100, 80000, 0.0003, 0.031),
     ]
     lots = [
-        TaxLot("TAX-ATTACK", "AAPL", 100, 190, date(2024, 1, 1), 882, True, 1000.0),
+        TaxLot("TAX-ATTACK", "VTI", 100, 190, date(2024, 1, 1), 882, True, 1000.0),
         TaxLot("IRA-ATTACK", "BND", 100, 790, date(2024, 1, 1), 882, True, 1000.0),
     ]
     menus = [AccountMenu("TAX-ATTACK", "open", None), AccountMenu("IRA-ATTACK", "open", None)]
 
     recommendations = recs(holdings, lots, menus)
-    trim = next(item for item in recommendations if item.action == "trim" and item.ticker == "AAPL")
-
+    trim = next(item for item in recommendations if item.action == "trim" and item.ticker == "VTI")
     assert any("Estimated tax cost:" in note for note in trim.tax_notes)
+
+    # General invariant: no surviving taxable-account sale may lack a tax estimate / unknown flag.
+    for item in recommendations:
+        if item.account_id == "TAX-ATTACK" and item.action in {"trim", "replace", "tax_loss_harvest"}:
+            assert any("Estimated tax cost" in note or "tax impact unknown" in note.lower() for note in item.tax_notes)
 
 
 def test_attack_wash_sale_bypass_fails_same_ticker_recent_buy_is_blocked():
@@ -106,8 +112,16 @@ def test_attack_account_menu_violation_is_blocked_for_overlap_replace():
     ]
 
     recommendations = recs(holdings, lots, menus)
-    blocked = next(item for item in recommendations if item.action == "hold" and item.ticker == "BND")
-    assert any("account menu" in text.lower() for text in blocked.rationale + blocked.tax_notes)
+    # The real constraint: no surviving recommendation may name a replacement instrument the
+    # destination account cannot hold. (A menu-block hold may be superseded by a higher-priority
+    # directional action during reconciliation, but the forbidden instrument must never appear.)
+    menu_map = {menu.account_id: menu for menu in menus}
+    for item in recommendations:
+        menu = menu_map.get(item.account_id)
+        if item.replacement_ticker and menu and menu.universe == "menu":
+            assert item.replacement_ticker in (menu.allowed_instruments or [])
+    # AGG is not in IRA-MENU's menu, so it must never be recommended as a replacement there.
+    assert not any(item.account_id == "IRA-MENU" and item.replacement_ticker == "AGG" for item in recommendations)
 
 
 def test_attack_force_action_when_none_justified_fails_on_balanced_portfolio():
