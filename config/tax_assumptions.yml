@@ -7,3 +7,4 @@ qualified_dividend_rate: 0.15
 confirm_with_cpa_above: 5000.0
 niit_rate: 0.038
 short_term_gain_block_fraction: 0.25
+lot_selection_method: fifo

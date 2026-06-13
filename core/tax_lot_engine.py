@@ -14,7 +14,51 @@ class TaxTradeAnalysis:
     confidence: str
 
 
-def estimate_sale_tax(lots: list[TaxLot], tax_profile: TaxProfile) -> TaxTradeAnalysis:
+def select_lots(lots: list[TaxLot], method: str = "fifo", shares_to_sell: float | None = None) -> list[TaxLot]:
+    """Order (and optionally subset) tax lots for a sale by a deterministic, rule-based method.
+
+    - "fifo": oldest lots first (by acquired_date, ticker tiebreak).
+    - "specific_lot": minimize realized gain -- realize losses first, then the smallest gains,
+      preferring long-term lots to avoid short-term rates.
+
+    This is rule-based lot ordering, not an optimizer. When shares_to_sell is given, whole lots are
+    accumulated in the chosen order until the share count is covered.
+    """
+    if method == "specific_lot":
+        ordered = sorted(
+            lots,
+            key=lambda lot: (
+                lot.unrealized_gain if lot.unrealized_gain is not None else 0.0,
+                0 if lot.is_long_term else 1,
+                lot.acquired_date,
+                lot.ticker,
+            ),
+        )
+    else:
+        ordered = sorted(lots, key=lambda lot: (lot.acquired_date, lot.ticker))
+    if shares_to_sell is None:
+        return ordered
+    selected: list[TaxLot] = []
+    remaining = shares_to_sell
+    for lot in ordered:
+        if remaining <= 0:
+            break
+        selected.append(lot)
+        remaining -= lot.shares
+    return selected
+
+
+def estimate_sale_tax(
+    lots: list[TaxLot],
+    tax_profile: TaxProfile,
+    shares_to_sell: float | None = None,
+    method: str | None = None,
+) -> TaxTradeAnalysis:
+    # For a partial sale, select which lots are realized (specific-lot vs FIFO). A full-position
+    # estimate (shares_to_sell is None) sums every lot, so lot ordering is immaterial and behavior
+    # is unchanged from before this capability existed.
+    if shares_to_sell is not None:
+        lots = select_lots(lots, method or tax_profile.lot_selection_method, shares_to_sell)
     if not lots:
         return TaxTradeAnalysis(None, None, False, ["No lot data available; tax impact unknown"], "low")
     estimated_gain = 0.0

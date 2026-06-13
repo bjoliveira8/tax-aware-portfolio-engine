@@ -47,6 +47,8 @@ class TaxProfile:
     niit_rate: float = 0.038
     # A short-term gain above confirm_with_cpa_above * this fraction suppresses a taxable sale.
     short_term_gain_block_fraction: float = 0.25
+    # Default lot-selection method for partial sales: "fifo" or "specific_lot".
+    lot_selection_method: str = "fifo"
 
 
 @dataclass(slots=True)
