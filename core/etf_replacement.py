@@ -3,6 +3,24 @@ from __future__ import annotations
 from core.overlap_engine import OverlapEngine
 from data.schemas import SecurityMetadata
 
+FUND_LIKE_TYPES = {"etf", "mutual_fund"}
+
+
+def is_compatible_replacement(current: SecurityMetadata, candidate: SecurityMetadata) -> bool:
+    if current.ticker == candidate.ticker:
+        return False
+    if current.asset_class != candidate.asset_class:
+        return False
+    if current.security_type != candidate.security_type and {current.security_type, candidate.security_type} <= FUND_LIKE_TYPES:
+        pass
+    elif current.security_type != candidate.security_type:
+        return False
+    return bool(
+        (current.index_family and current.index_family == candidate.index_family)
+        or current.sub_asset_class == candidate.sub_asset_class
+        or (current.region == candidate.region and current.style == candidate.style)
+    )
+
 
 def rank_replacements(
     current_ticker: str,
@@ -16,6 +34,8 @@ def rank_replacements(
         if candidate == current_ticker:
             continue
         meta = security_master[candidate]
+        if not is_compatible_replacement(current, meta):
+            continue
         overlap = overlap_engine.overlap_score(current_ticker, candidate)
         liquidity_ok = (meta.avg_daily_dollar_volume or 0) >= 5_000_000
         fee_delta = (current.expense_ratio or 0.0) - (meta.expense_ratio or 0.0)

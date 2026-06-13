@@ -18,7 +18,7 @@ def test_report_and_process_log(tmp_path: Path):
     master = load_security_master_csv(ROOT / "data/security_master.csv")
     analysis = generate_recommendations(result.holdings, result.tax_lots, result.account_menus, master, THRESHOLDS, TAX_PROFILE, TARGET, date(2026, 6, 1))
     recommendations = analysis["recommendations"]
-    process_log = build_process_log(recommendations, 24.0, False, True, False, "2026-06-01")
+    process_log = build_process_log(recommendations, analysis, 24.0, "2026-06-01")
     report = render_report(analysis, recommendations, process_log, 24.0, tmp_path / "report.md")
     assert "PORTFOLIO GRADE" in report
     assert "Analysis, not financial advice." in report

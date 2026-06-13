@@ -31,7 +31,7 @@ class WashSaleGuard:
         for lot in all_lots:
             if lot.ticker == ticker and window_start <= lot.acquired_date <= window_end:
                 notes.append(f"Same ticker buy in window: {lot.account_id} on {lot.acquired_date.isoformat()}")
-                if "ira" in lot.account_id.lower() or "roth" in lot.account_id.lower():
+                if lot.account_type in {"traditional_ira", "roth_ira", "traditional_401k", "roth_401k", "hsa"}:
                     return WashSaleResult(
                         "wash_sale_blocked_retirement_account_purchase",
                         notes + ["Permanent loss risk via retirement account purchase."],

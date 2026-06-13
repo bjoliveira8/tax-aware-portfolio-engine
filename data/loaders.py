@@ -28,6 +28,10 @@ ACCOUNT_TYPE_ALIASES = {
 }
 
 
+class InputValidationError(ValueError):
+    pass
+
+
 def normalize_ticker(value: str) -> str:
     return value.strip().upper()
 
@@ -66,7 +70,11 @@ def load_holdings_csv(path: str | Path) -> tuple[list[Holding], list[str]]:
     return holdings, warnings
 
 
-def load_tax_lots_csv(path: str | Path, as_of_date: date | None = None) -> tuple[list[TaxLot], list[str]]:
+def load_tax_lots_csv(
+    path: str | Path,
+    as_of_date: date | None = None,
+    account_types: dict[str, str] | None = None,
+) -> tuple[list[TaxLot], list[str]]:
     as_of = as_of_date or date(2026, 6, 1)
     lots: list[TaxLot] = []
     warnings: list[str] = []
@@ -92,6 +100,7 @@ def load_tax_lots_csv(path: str | Path, as_of_date: date | None = None) -> tuple
                     holding_period_days=holding_period_days,
                     is_long_term=holding_period_days > 365,
                     unrealized_gain=unrealized_gain,
+                    account_type=account_types.get(row["account_id"], "other") if account_types else "other",
                 )
             )
     return lots, warnings
@@ -133,13 +142,34 @@ def load_security_master_csv(path: str | Path) -> dict[str, SecurityMetadata]:
     return data
 
 
+def validate_ingestion(result: IngestionResult, security_master: dict[str, SecurityMetadata]) -> None:
+    errors: list[str] = []
+    holding_tickers = {holding.ticker for holding in result.holdings}
+    lot_tickers = {lot.ticker for lot in result.tax_lots}
+    unknown_holdings = sorted(ticker for ticker in holding_tickers if ticker not in security_master)
+    if unknown_holdings:
+        errors.append(f"Unknown tickers in holdings: {', '.join(unknown_holdings)}")
+    unknown_lots = sorted(ticker for ticker in lot_tickers if ticker not in security_master)
+    if unknown_lots:
+        errors.append(f"Unknown tickers in tax lots: {', '.join(unknown_lots)}")
+    if result.account_menus:
+        menu_accounts = {menu.account_id for menu in result.account_menus}
+        holding_accounts = {holding.account_id for holding in result.holdings}
+        missing_menu_coverage = sorted(account for account in holding_accounts if account not in menu_accounts)
+        if missing_menu_coverage:
+            errors.append(f"Missing account menu coverage for accounts: {', '.join(missing_menu_coverage)}")
+    if errors:
+        raise InputValidationError("; ".join(errors))
+
+
 class CsvDataProvider:
     def __init__(self, as_of_date: date | None = None):
         self.as_of_date = as_of_date
 
     def load(self, holdings_path: str | Path, lots_path: str | Path, account_menus_path: str | Path | None = None) -> IngestionResult:
         holdings, holding_warnings = load_holdings_csv(holdings_path)
-        lots, lot_warnings = load_tax_lots_csv(lots_path, as_of_date=self.as_of_date)
+        account_types = {holding.account_id: holding.account_type for holding in holdings}
+        lots, lot_warnings = load_tax_lots_csv(lots_path, as_of_date=self.as_of_date, account_types=account_types)
         menus = load_account_menus_csv(account_menus_path) if account_menus_path else []
         return IngestionResult(holdings=holdings, tax_lots=lots, account_menus=menus, warnings=holding_warnings + lot_warnings)
 

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Sequence
 
-from data.schemas import Recommendation
+from data.schemas import ProcessLogEntry, Recommendation
 
 GRADE_WEIGHTS = {
     "allocation_fit": 30,
@@ -11,6 +12,8 @@ GRADE_WEIGHTS = {
     "fee_drag": 15,
     "diversification": 15,
 }
+EXECUTABLE_ACTIONS = {"trim", "replace", "relocate", "rebalance", "add", "tax_loss_harvest"}
+BLOCKED_ACTIONS = {"do_nothing_due_to_tax_cost"}
 
 
 def compute_grade(
@@ -35,10 +38,25 @@ def compute_grade(
     return {"score": sum(components.values()), "components": components}
 
 
+def _render_section(lines: list[str], title: str, recommendations: list[Recommendation]) -> None:
+    lines.append(title)
+    if not recommendations:
+        lines.append("- None")
+        lines.append("")
+        return
+    for idx, rec in enumerate(recommendations, start=1):
+        target = f" -> {rec.replacement_ticker}" if rec.replacement_ticker else ""
+        lines.append(f"{idx}. {rec.action.upper()} {rec.ticker}{target}")
+        lines.append(f"   Why: {'; '.join(rec.rationale)}")
+        lines.append(f"   Tax note: {'; '.join(rec.tax_notes) if rec.tax_notes else 'None'}")
+        lines.append(f"   Confidence: {rec.confidence} | Urgency: {rec.urgency}")
+    lines.append("")
+
+
 def render_report(
     analysis: dict[str, object],
     recommendations: list[Recommendation],
-    process_log: list[object],
+    process_log: Sequence[ProcessLogEntry],
     fee_drag_bps: float,
     output_path: str | Path,
 ) -> str:
@@ -47,28 +65,32 @@ def render_report(
     overlap_count = len(concentration["single_name_flags"])
     tax_drag_flags = sum(1 for item in recommendations if item.action == "do_nothing_due_to_tax_cost")
     grade = compute_grade(drift_report, concentration, fee_drag_bps, tax_drag_flags, overlap_count)
-    if len(recommendations) == 1 and recommendations[0].rationale == ["No action is justified."]:
+    executable = [item for item in recommendations if item.action in EXECUTABLE_ACTIONS]
+    blocked = [item for item in recommendations if item.action in BLOCKED_ACTIONS]
+    observations = [item for item in recommendations if item.action not in EXECUTABLE_ACTIONS | BLOCKED_ACTIONS]
+    if len(recommendations) == 1 and recommendations[0].rationale == ["No holdings loaded; analysis aborted."]:
+        bottom_line = [
+            "No holdings loaded; analysis aborted.",
+            "Load a holdings snapshot before requesting trade guidance.",
+            "No action plan was generated.",
+        ]
+    elif len(recommendations) == 1 and recommendations[0].rationale == ["No action is justified."]:
         bottom_line = [
             "No action is justified.",
             "Drift is within tolerance, concentration is acceptable, and tax cost outweighs benefit.",
             "Continue contributions according to target allocation.",
         ]
     else:
-        actionable = [item for item in recommendations if item.action != "hold"]
         bottom_line = [
-            f"Do these {len(actionable)} things now." if actionable else "No action is justified.",
+            f"Do these {len(executable)} things now." if executable else "No immediately executable trades.",
             "Protect taxable gains unless tax-aware math says otherwise.",
             "Use tax-advantaged accounts and contributions first.",
         ]
     lines = ["BOTTOM LINE"] + [f"- {line}" for line in bottom_line] + [""]
-    lines.append("PRIORITY ACTIONS")
-    for idx, rec in enumerate(recommendations, start=1):
-        target = f" -> {rec.replacement_ticker}" if rec.replacement_ticker else ""
-        lines.append(f"{idx}. {rec.action.upper()} {rec.ticker}{target}")
-        lines.append(f"   Why: {'; '.join(rec.rationale)}")
-        lines.append(f"   Tax note: {'; '.join(rec.tax_notes) if rec.tax_notes else 'None'}")
-        lines.append(f"   Confidence: {rec.confidence} | Urgency: {rec.urgency}")
-    lines += ["", f"PORTFOLIO GRADE: {grade['score']} / 100"]
+    _render_section(lines, "EXECUTABLE ACTIONS", executable)
+    _render_section(lines, "BLOCKED ACTIONS", blocked)
+    _render_section(lines, "OBSERVATIONS", observations)
+    lines += [f"PORTFOLIO GRADE: {grade['score']} / 100"]
     for key, weight in GRADE_WEIGHTS.items():
         pretty = key.replace("_", " ").title()
         lines.append(f"- {pretty}: {grade['components'][key]} / {weight}")

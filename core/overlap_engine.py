@@ -52,7 +52,8 @@ class OverlapEngine:
         for holding in holdings:
             meta = self.metadata_for(holding.ticker)
             by_asset[meta.asset_class] += holding.market_value / total
-            by_sector[meta.sector_focus] += holding.market_value / total
+            if meta.sector_focus not in {"none", "n/a", ""}:
+                by_sector[meta.sector_focus] += holding.market_value / total
             by_region[meta.region] += holding.market_value / total
         return {"asset_class": dict(by_asset), "sector": dict(by_sector), "region": dict(by_region)}
 
@@ -60,20 +61,25 @@ class OverlapEngine:
         total = sum(item.market_value for item in holdings) or 1.0
         single_name = []
         by_account = defaultdict(lambda: defaultdict(float))
+        by_ticker = defaultdict(float)
         sector_totals = defaultdict(float)
         for holding in holdings:
-            weight = holding.market_value / total
-            if weight > single_name_threshold:
-                single_name.append({"ticker": holding.ticker, "weight": round(weight, 4)})
+            by_ticker[holding.ticker] += holding.market_value
             by_account[holding.account_id][holding.ticker] += holding.market_value
-            sector_totals[self.metadata_for(holding.ticker).sector_focus] += weight
+            sector = self.metadata_for(holding.ticker).sector_focus
+            if sector not in {"none", "n/a", ""}:
+                sector_totals[sector] += holding.market_value / total
+        for ticker, value in by_ticker.items():
+            weight = value / total
+            if weight > single_name_threshold:
+                single_name.append({"ticker": ticker, "weight": round(weight, 4)})
         sector_flags = [{"sector": sector, "weight": round(weight, 4)} for sector, weight in sector_totals.items() if weight > sector_threshold]
         account_concentration = {}
         for account_id, positions in by_account.items():
             account_total = sum(positions.values()) or 1.0
             account_concentration[account_id] = {ticker: round(value / account_total, 4) for ticker, value in positions.items()}
         return {
-            "single_name_flags": single_name,
+            "single_name_flags": sorted(single_name, key=lambda item: (item["ticker"], -item["weight"])),
             "sector_flags": sector_flags,
             "account_concentration": account_concentration,
         }
