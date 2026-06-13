@@ -1,0 +1,5 @@
+account_id,universe,allowed_instruments
+TAX-1,open,
+IRA-1,menu,FXNAX
+ROTH-1,menu,VTI|VXUS|AVUV|AGG|BND|ITOT
+HSA-1,menu,VTI|VXUS|AGG|BND|SCHB

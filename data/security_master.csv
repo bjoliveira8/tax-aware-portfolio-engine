@@ -1,0 +1,15 @@
+ticker,security_name,security_type,issuer,asset_class,sub_asset_class,region,style,sector_focus,index_family,expense_ratio,distribution_yield,aum_usd,avg_daily_dollar_volume,tax_efficiency_bucket,primary_benchmark,source_note,as_of_date
+AAPL,Apple Inc,stock,Apple,us_equity,individual_stock,us,large_growth,technology,AAPL_SINGLE,,0.005,3000000000000,1000000000,medium,None,manual,2026-06-01
+VTI,Vanguard Total Stock Market ETF,etf,Vanguard,us_equity,broad_market,us,broad_market,none,CRSP_US_TOTAL,0.0003,0.013,450000000000,900000000,high,CRSP US Total Market,manual,2026-06-01
+ITOT,iShares Core S&P Total U.S. Stock Market ETF,etf,iShares,us_equity,broad_market,us,broad_market,none,S&P_TOTAL_US,0.0003,0.013,65000000000,200000000,high,S&P Total Market,manual,2026-06-01
+SCHB,Schwab U.S. Broad Market ETF,etf,Schwab,us_equity,broad_market,us,broad_market,none,DJ_US_BROAD,0.0003,0.013,30000000000,60000000,high,Dow Jones U.S. Broad Stock Market,manual,2026-06-01
+VXUS,Vanguard Total International Stock ETF,etf,Vanguard,international_equity,broad_market,developed_ex_us,broad_market,none,FTSE_GLOBAL_EX_US,0.0007,0.028,80000000000,250000000,high,FTSE Global All Cap ex US,manual,2026-06-01
+VEA,Vanguard FTSE Developed Markets ETF,etf,Vanguard,international_equity,developed_markets,developed_ex_us,broad_market,none,FTSE_DEV_EX_US,0.0005,0.027,120000000000,220000000,high,FTSE Developed ex US,manual,2026-06-01
+BND,Vanguard Total Bond Market ETF,etf,Vanguard,taxable_bond,aggregate_bond,us,aggregate_bond,none,BLOOMBERG_US_AGG,0.0003,0.031,100000000000,180000000,low,Bloomberg US Aggregate,manual,2026-06-01
+AGG,iShares Core U.S. Aggregate Bond ETF,etf,iShares,taxable_bond,aggregate_bond,us,aggregate_bond,none,BLOOMBERG_US_AGG,0.0003,0.030,90000000000,160000000,low,Bloomberg US Aggregate,manual,2026-06-01
+IEF,iShares 7-10 Year Treasury Bond ETF,etf,iShares,taxable_bond,treasury_bond,us,intermediate_treasury,none,ICE_7_10_TSY,0.0015,0.028,30000000000,70000000,low,ICE U.S. Treasury 7-10 Year,manual,2026-06-01
+FXNAX,Fidelity U.S. Bond Index Fund,mutual_fund,Fidelity,taxable_bond,aggregate_bond,us,aggregate_bond,none,BLOOMBERG_US_AGG,0.0045,0.028,80000000000,0,low,Bloomberg US Aggregate,manual,2026-06-01
+ARKK,ARK Innovation ETF,etf,ARK,us_equity,active_growth,us,large_growth,technology,ARK_ACTIVE_GROWTH,0.0075,0.0,8000000000,25000000,low,None,manual,2026-06-01
+VTV,Vanguard Value ETF,etf,Vanguard,us_equity,value,us,large_value,none,CRSP_US_LARGE_VALUE,0.0004,0.022,120000000000,160000000,high,CRSP US Large Cap Value,manual,2026-06-01
+AVUV,Avantis US Small Cap Value ETF,etf,Avantis,us_equity,small_value,us,small_value,none,US_SMALL_VALUE_ACTIVE,0.0025,0.018,18000000000,5000000,medium,None,manual,2026-06-01
+CASH,Cash,cash,cash,cash,cash,n/a,cash,none,CASH,,,,,high,None,manual,2026-06-01

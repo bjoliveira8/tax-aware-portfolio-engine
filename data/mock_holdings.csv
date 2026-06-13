@@ -1,0 +1,9 @@
+account_id,account_name,account_type,ticker,asset_type,shares,market_value,expense_ratio,dividend_yield
+TAX-1,Taxable Brokerage,taxable,AAPL,stock,150,30000,,0.005
+TAX-1,Taxable Brokerage,taxable,VTI,etf,260,65000,0.0003,0.013
+TAX-1,Taxable Brokerage,taxable,BND,etf,600,42000,0.0003,0.031
+TAX-1,Taxable Brokerage,taxable,ARKK,etf,150,9000,0.0075,0.000
+TAX-1,Taxable Brokerage,taxable,VXUS,etf,150,6500,0.0007,0.028
+IRA-1,Traditional IRA,traditional_ira,FXNAX,mutual_fund,250,30000,0.0045,0.028
+ROTH-1,Roth IRA,roth_ira,CASH,cash,1,8000,,0.0
+HSA-1,HSA,hsa,CASH,cash,1,5000,,0.0
